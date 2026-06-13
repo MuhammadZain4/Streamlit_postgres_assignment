@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────────
+  # SERVICE 1 — PostgreSQL database
+  # ─────────────────────────────────────────────
+  postgres_db:
+    image: postgres:15
+    container_name: opportunity_postgres
+    environment:
+      POSTGRES_DB: student_opportunities_db
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: app_password
+    ports:
+      - "5432:5432"
+    volumes:
+      # Named volume keeps data alive across `docker compose down` restarts
+      - postgres_data:/var/lib/postgresql/data
+      # SQL files are run once when the container is first created
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # ─────────────────────────────────────────────
+  # SERVICE 2 — pgAdmin 4 web UI
+  # ─────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: opportunity_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres_db
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # ─────────────────────────────────────────────
+  # SERVICE 3 — Streamlit application
+  # ─────────────────────────────────────────────
+  streamlit_app:
+    build: .
+    container_name: opportunity_streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      # Use the Docker service name as the host — Docker's internal DNS resolves it
+      DB_HOST: postgres_db
+      DB_PORT: 5432
+      DB_NAME: student_opportunities_db
+      DB_USER: app_user
+      DB_PASSWORD: app_password
+    depends_on:
+      - postgres_db
+    restart: unless-stopped
+    networks:
+      - app_network
+
+# ─────────────────────────────────────────────
+# Named volume — data persists on the Docker host
+# ─────────────────────────────────────────────
+volumes:
+  postgres_data:
+
+# ─────────────────────────────────────────────
+# Shared internal network so services can reach
+# each other by service name (e.g. "postgres_db")
+# ─────────────────────────────────────────────
+networks:
+  app_network:
+    driver: bridge
